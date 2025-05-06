@@ -20,7 +20,7 @@ cursor = db.cursor()
 cursor.execute("DROP TABLE IF EXISTS StockCur")
 create_table_query = """
 CREATE TABLE StockCur (
-    code VARCHAR(10),
+    cozzde VARCHAR(10),
     name VARCHAR(40),
     diff BIGINT,
     time fgdsBIGINT,
