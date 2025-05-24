@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QPushButton, QComboBox, QMessageBox
 )
 from PyQt5.QtCore import Qt, QTimer, QCoreApplication, QTime
-from PyQt5.QtGui import QPalette, QColor
+from PyQt5.QtGui import QPalette, QColor  # QPalette, QColor 임포트
 from functools import partial
 import random
 
@@ -27,6 +27,8 @@ except ImportError as e:
         "CpFutureNContract, CpFutureOptionCancel 클래스/함수가 정의되어 있어야 합니다."
     )
     print(error_message)
+    # QApplication 인스턴스가 생성되기 전에는 QMessageBox를 안전하게 사용하기 어려움
+    # 필요하다면 애플리케이션 시작 부분에서 인스턴스를 만들고 메시지 박스를 띄울 수 있음
     sys.exit(1)
 
 
@@ -47,17 +49,6 @@ class TR_OpBothSellApp(QWidget):
     REORDER_ATTEMPTS = 3
     REORDER_PRICE_ADJUSTMENT_TICK = -0.01
     REORDER_MAIN_LOOP_INTERVAL_SECONDS = 7
-    # =========================================================================
-
-    # =========================================================================
-    # 테마 어둡기 조정 변수 (사용자 조정 가능)
-    # =========================================================================
-    # 배경색 어둡기 조절 값 (100=원본, 110=10% 어둡게, 값이 클수록 더 어두워짐)
-    # 예: 100(원본), 110(약간 어둡게), 125(중간 어둡게), 150(많이 어둡게)
-    BG_DARKEN_FACTOR = 110
-    # 텍스트색 어둡기 조절 값 (100=원본, 값이 클수록 더 어두워짐)
-    # 배경이 어두워지므로, 텍스트는 원본(100) 또는 아주 약간만(105) 어둡게 하는 것을 권장
-    TEXT_DARKEN_FACTOR = 103
 
     # =========================================================================
 
@@ -73,15 +64,19 @@ class TR_OpBothSellApp(QWidget):
                 center_point = screen.geometry().center()
             else:
                 desktop = QApplication.desktop()
-                if desktop:
+                if desktop:  # Fallback for older Qt or specific environments
                     center_point = desktop.screen().rect().center()
-                else:
+                else:  # Last resort
                     center_point = self.rect().center()
             self.move(center_point - self.rect().center())
         except Exception:
-            pass
+            pass  # 이동 실패 시에도 프로그램은 계속 실행
 
+        # --- 시스템 색상 기반으로 약간 어둡게 테마 적용 ---
         self.apply_slightly_darker_system_theme()
+        # --- 테마 적용 끝 ---
+
+        # QWidget의 배경색이 QPalette.Window를 사용하도록 설정
         self.setAutoFillBackground(True)
 
         self.layout = QVBoxLayout()
@@ -93,6 +88,7 @@ class TR_OpBothSellApp(QWidget):
         self.objNContract = CpFutureNContract()
         self.objCancel = CpFutureOptionCancel()
 
+        # UI 구성 (이전과 동일, QLabel 등은 팔레트 색상을 따름)
         option1_row = QHBoxLayout()
         self.option_code1_input = QLineEdit()
         self.option_code1_input.setPlaceholderText("매도 옵션코드 1")
@@ -181,31 +177,49 @@ class TR_OpBothSellApp(QWidget):
         original_palette = QApplication.palette()
         new_palette = QPalette(original_palette)
 
-        # 클래스 변수에서 어둡기 조절 값 참조
-        bg_darken_factor = self.BG_DARKEN_FACTOR
-        text_darken_factor = self.TEXT_DARKEN_FACTOR
+        # 배경 및 유사 역할 색상 어둡게 하기
+        # Factor: 100 = 원본, 110 = 10% 어둡게, 120 = 20% 어둡게 등
+        bg_darken_factor = 115  # 15% 어둡게
 
         roles_to_darken_bg = [
             QPalette.Window, QPalette.Base, QPalette.AlternateBase,
             QPalette.Button, QPalette.Highlight, QPalette.ToolTipBase,
+            # QPalette.Light, QPalette.Midlight, QPalette.Dark, QPalette.Mid, QPalette.Shadow
+            # 위 주석처리된 역할들은 3D 효과에 사용되므로, 단순 darker 적용 시 어색할 수 있어 제외하거나 신중히 조정
         ]
         for role in roles_to_darken_bg:
             original_color = original_palette.color(role)
             if original_color.isValid():
                 new_palette.setColor(role, original_color.darker(bg_darken_factor))
 
+        # 텍스트 및 유사 역할 색상 어둡게 하기 (배경보다 덜 어둡게)
+        text_darken_factor = 105  # 5% 어둡게 (가독성 유지 위해)
+
         roles_to_darken_text = [
             QPalette.WindowText, QPalette.Text, QPalette.ButtonText,
             QPalette.HighlightedText, QPalette.ToolTipText, QPalette.BrightText
         ]
 
+        # PlaceholderText는 Qt 5.12 이상에서 사용 가능
         if hasattr(QPalette, 'PlaceholderText'):
+            # PlaceholderText는 배경(Base)과 대비가 있어야 하므로,
+            # Base 색상이 어두워졌다면 PlaceholderText는 상대적으로 밝거나,
+            # 다른 텍스트처럼 약간만 어둡게 할 수 있음.
+            # 여기서는 다른 텍스트와 동일하게 처리.
             roles_to_darken_text.append(QPalette.PlaceholderText)
 
         for role in roles_to_darken_text:
             original_color = original_palette.color(role)
             if original_color.isValid():
+                # 텍스트 색상이 배경색과 너무 유사해지지 않도록 주의
+                # 예: 어두운 배경에 더 어두운 텍스트가 되지 않도록
+                # 여기서는 일괄적으로 약간 어둡게 하지만, 정교한 조정이 필요할 수 있음
                 darker_color = original_color.darker(text_darken_factor)
+
+                # 만약 원래 텍스트가 매우 밝았다면(예: 흰색), 약간 어둡게 해도 괜찮음.
+                # 원래 어두운 텍스트였다면, 더 어둡게 하면 가독성 문제 발생 가능.
+                # QColor.lightness() 등으로 원래 밝기를 확인하여 조건부로 조정할 수도 있음.
+                # 여기서는 단순하게 적용.
                 new_palette.setColor(role, darker_color)
 
         QApplication.setPalette(new_palette)
@@ -682,9 +696,14 @@ class TR_OpBothSellApp(QWidget):
 if __name__ == "__main__":
     if not InitPlusCheck():
         print("❌ PLUS 시스템 초기화 실패. 프로그램을 종료합니다.")
+        # 이 시점에서 QMessageBox를 사용하려면 QApplication 인스턴스가 필요함.
+        # 간단한 콘솔 알림 후 종료.
         sys.exit(1)
 
     app = QApplication(sys.argv)
+    # TR_OpBothSellApp 클래스 내에서 QApplication.setPalette()를 호출하므로,
+    # app 인스턴스 생성 후 window 생성 전에 별도로 팔레트를 설정할 필요는 없음.
+
     window = TR_OpBothSellApp()
     window.show()
     sys.exit(app.exec_())
